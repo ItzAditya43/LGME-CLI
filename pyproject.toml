@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lgme-cli"
+version = "1.0.0"
+description = "Linux Gaming Made Easy: a beginner-friendly CLI to add, set up and play games on Linux (Steam, archives, folders, installers)."
+readme = "README.md"
+requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://github.com/ItzAditya43/LGME-CLI"
+
+[project.scripts]
+lgme = "lgme:main"
+
+[tool.setuptools]
+py-modules = ["lgme"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# LGME launcher. Works when symlinked (e.g. ~/.local/bin/lgme).
+here=$(dirname "$(readlink -f "$0")")
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "LGME needs Python 3. Install the 'python' or 'python3' package with your package manager." >&2
+  exit 1
+fi
+exec python3 "$here/lgme.py" "$@"
