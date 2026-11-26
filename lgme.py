@@ -2521,6 +2521,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         sys.stderr.write("\nCancelled.\n")
         return 130
+    except BrokenPipeError:  # e.g. `lgme list | head`; the reader went away, that's fine
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 141
     except Exception as exc:  # noqa: BLE001 - last-resort friendly message
         if getattr(args, "debug", False):
             raise
