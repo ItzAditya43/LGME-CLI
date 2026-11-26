@@ -1,8 +1,10 @@
 #!/usr/bin/env sh
 # LGME launcher. Works when symlinked (e.g. ~/.local/bin/lgme).
+# It imports lgme.py instead of running it, so Python caches the compiled code and starts faster.
+# -I (isolated mode) stops files in the current folder or PYTHON* settings from interfering.
 here=$(dirname "$(readlink -f "$0")")
 if ! command -v python3 >/dev/null 2>&1; then
   echo "LGME needs Python 3. Install the 'python' or 'python3' package with your package manager." >&2
   exit 1
 fi
-exec python3 "$here/lgme.py" "$@"
+exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); import lgme; sys.exit(lgme.main())' "$here" "$@"

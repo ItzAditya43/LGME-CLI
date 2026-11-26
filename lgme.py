@@ -16,10 +16,9 @@ Run `lgme` with no arguments for a guided menu.
 
 from __future__ import annotations
 
-import argparse
-import datetime as dt
-import difflib
-import hashlib
+# Only small, always-needed modules are imported here. Heavier ones (zipfile, tarfile,
+# urllib, hashlib, difflib) are imported inside the functions that use them, so everyday
+# commands like `lgme list` or `lgme NAME` start fast and use little memory.
 import json
 import os
 import re
@@ -28,16 +27,16 @@ import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from types import SimpleNamespace as Args
+from typing import TYPE_CHECKING
 
-VERSION = "1.0.0"
+if TYPE_CHECKING:
+    import argparse
+    from typing import Any, Iterable
+
+VERSION = "1.0.1"
 APP = "lgme"
 HOME = Path.home()
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share") / APP
@@ -201,7 +200,8 @@ def clean_user_path(text: str) -> str:
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
         text = text[1:-1]
     if text.startswith("file://"):
-        text = urllib.parse.unquote(urllib.parse.urlparse(text).path)
+        from urllib.parse import unquote, urlparse
+        text = unquote(urlparse(text).path)
     elif not text.startswith(("http://", "https://")):
         text = re.sub(r"\\(.)", r"\1", text)  # "My\ Game.zip" -> "My Game.zip"
     return text
@@ -291,7 +291,8 @@ def find_game(registry: dict[str, Any], query: str) -> str:
     for name, game in registry.items():
         if slug(game.get("title", "")) == key:
             return name
-    matches = difflib.get_close_matches(key, list(registry), n=3, cutoff=0.5)
+    from difflib import get_close_matches
+    matches = get_close_matches(key, list(registry), n=3, cutoff=0.5)
     matches += [n for n in registry if key and key in n and n not in matches]
     if matches:
         hint = "Did you mean: " + ", ".join(matches[:3]) + "?"
@@ -302,9 +303,15 @@ def find_game(registry: dict[str, Any], query: str) -> str:
     raise UserError(f"There's no game called '{query}'.", hint)
 
 
+# Names a game can't have, because `lgme NAME` would run the command instead.
+RESERVED_NAMES = {"add", "install", "import", "steam", "list", "ls", "run", "play", "start", "info", "logs",
+                  "fix", "set", "rename", "remove", "uninstall", "rm", "command", "shortcut", "doctor",
+                  "check", "setup", "settings", "update", "help", "menu", "lgme"}
+
+
 def unique_name(registry: dict[str, Any], base: str) -> str:
     name, i = base, 2
-    while name in registry or (games_dir() / name).exists():
+    while name in registry or name in RESERVED_NAMES or (games_dir() / name).exists():
         name, i = f"{base}-{i}", i + 1
     return name
 
@@ -315,8 +322,9 @@ def choose_name(registry: dict[str, Any], suggested: str, explicit: str | None,
     name = slug(explicit or suggested)
     if explicit is None and is_interactive() and not ASSUME_YES:
         name = slug(ask("Name for this game (you'll type it to play, e.g. 'lgme run NAME')", name))
-    while name in registry or (needs_folder and (games_dir() / name).exists()):
-        what = (f"You already have a game called '{name}'" if name in registry
+    while name in registry or name in RESERVED_NAMES or (needs_folder and (games_dir() / name).exists()):
+        what = (f"'{name}' is one of LGME's own commands, so it can't be a game name" if name in RESERVED_NAMES
+                else f"You already have a game called '{name}'" if name in registry
                 else f"The folder {games_dir() / name} already exists")
         alt = unique_name(registry, name)
         if is_interactive() and not ASSUME_YES:
@@ -330,7 +338,7 @@ def choose_name(registry: dict[str, Any], suggested: str, explicit: str | None,
 
 
 def now_iso() -> str:
-    return dt.datetime.now().replace(microsecond=0).isoformat()
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 # --------------------------------------------------------------------------
@@ -374,10 +382,11 @@ def _walk(root: Path) -> Iterable[tuple[Path, int]]:
             yield current / filename, depth + 1
 
 
-def find_launchables(root: Path, include_installers: bool = False) -> list[Path]:
+def find_launchables(root: Path, include_installers: bool = False, hint: str | None = None) -> list[Path]:
     """Likely game programs (.exe or Linux launchers), best guesses first."""
+    from difflib import SequenceMatcher
     found: list[tuple[tuple, Path]] = []
-    hint = slug(root.name)
+    hint = slug(hint or root.name)
     for path, depth in _walk(root):
         if path.is_symlink() or not path.is_file():
             continue
@@ -395,7 +404,7 @@ def find_launchables(root: Path, include_installers: bool = False) -> list[Path]
             pass
         else:
             continue
-        similarity = difflib.SequenceMatcher(None, slug(path.stem), hint).ratio()
+        similarity = SequenceMatcher(None, slug(path.stem), hint).ratio()
         found.append(((depth, -round(similarity, 1), name), path))
     return [p for _, p in sorted(found, key=lambda item: item[0])]
 
@@ -476,6 +485,7 @@ def archive_title(path: Path) -> str:
 
 
 def archive_kind(path: Path) -> str | None:
+    import tarfile
     try:
         with path.open("rb") as fh:
             head = fh.read(512)
@@ -526,6 +536,8 @@ def safe_member_path(name: str) -> PurePosixPath | None:
 
 
 def archive_unpacked_size(archive: Path, kind: str) -> int | None:
+    import tarfile
+    import zipfile
     try:
         if kind == "zip":
             with zipfile.ZipFile(archive) as zf:
@@ -535,7 +547,7 @@ def archive_unpacked_size(archive: Path, kind: str) -> int | None:
                 return sum(m.size for m in tf.getmembers())
         tool = external_extractor()
         if tool in ("7z", "7zz", "7za"):
-            out = subprocess.run([tool, "l", "-slt", str(archive)], capture_output=True, text=True,
+            out = subprocess.run([tool, "l", "-slt", "-ba", str(archive)], capture_output=True, text=True,
                                  stdin=subprocess.DEVNULL, timeout=120, errors="replace")
             sizes = [int(m) for m in re.findall(r"^Size = (\d+)$", out.stdout, re.M)]
             if out.returncode == 0 and sizes:
@@ -568,6 +580,7 @@ def check_space(where: Path, needed: int, estimated: bool = False) -> None:
 
 
 def extract_zip(archive: Path, target: Path) -> None:
+    import zipfile
     with zipfile.ZipFile(archive) as zf:
         infos = zf.infolist()
         progress = Progress("Unpacking", sum(i.file_size for i in infos))
@@ -597,10 +610,9 @@ def extract_zip(archive: Path, target: Path) -> None:
             warn(f"Skipped {skipped_links} shortcut link(s) inside the archive for safety.")
 
 
-_TAR_FILTER_ERRORS = (getattr(tarfile, "FilterError", tarfile.TarError),)
-
-
 def extract_tar(archive: Path, target: Path) -> None:
+    import tarfile
+    filter_errors = (getattr(tarfile, "FilterError", tarfile.TarError),)
     progress = Progress("Unpacking")
     with tarfile.open(archive) as tf:
         def members():
@@ -616,19 +628,22 @@ def extract_tar(archive: Path, target: Path) -> None:
             else:  # Python < 3.12
                 safe = (m for m in members() if not (m.issym() or m.islnk() or m.isdev()))
                 tf.extractall(target, members=safe)
-        except _TAR_FILTER_ERRORS as exc:
+        except filter_errors as exc:
             raise UserError(f"The archive contains an unsafe entry ({exc}).",
                             "LGME stopped so nothing outside the game folder could be changed.") from exc
     progress.done("Unpacked the archive")
 
 
 def remove_escaping_links(target: Path) -> None:
+    """Delete links (to files or folders) inside `target` that point outside it."""
     root = target.resolve()
-    for path, _ in list(_walk(target)):
-        if path.is_symlink():
-            resolved = path.resolve()
-            if resolved != root and root not in resolved.parents:
-                path.unlink()
+    for dirpath, dirnames, filenames in os.walk(target):
+        for entry in dirnames + filenames:
+            path = Path(dirpath) / entry
+            if path.is_symlink():
+                resolved = path.resolve()
+                if resolved != root and root not in resolved.parents:
+                    path.unlink()
 
 
 def extract_external(archive: Path, target: Path) -> None:
@@ -661,6 +676,7 @@ def extract_external(archive: Path, target: Path) -> None:
 
 
 def extract_archive(archive: Path, kind: str, target: Path) -> None:
+    import zipfile
     if kind == "zip" and not is_split_zip(archive):
         try:
             extract_zip(archive, target)
@@ -685,8 +701,10 @@ def extract_archive(archive: Path, kind: str, target: Path) -> None:
 
 
 def _download_error(exc: Exception, url: str) -> UserError:
-    host = urllib.parse.urlparse(url).netloc
-    if isinstance(exc, urllib.error.HTTPError):
+    from urllib.error import HTTPError
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc
+    if isinstance(exc, HTTPError):
         reasons = {
             401: "the site wants you to log in first",
             403: "the site refused the download (it may only work in a browser)",
@@ -705,6 +723,9 @@ def _download_error(exc: Exception, url: str) -> UserError:
 
 def fetch(url: str, part: Path, label: str = "Downloading") -> tuple[Path, str | None]:
     """Download `url` into `part` (resuming if possible). Returns (part, server filename)."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise UserError("Download links must start with http:// or https://.")
@@ -776,6 +797,8 @@ def unique_path(path: Path) -> Path:
 
 
 def download_archive(url: str) -> Path:
+    import hashlib
+    import urllib.parse
     downloads = DATA_DIR / "downloads"
     part = downloads / (hashlib.sha256(url.encode()).hexdigest()[:16] + ".part")
     part, server_name = fetch(url, part)
@@ -799,7 +822,17 @@ def natural_key(text: str) -> list:
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", text)]
 
 
+_CACHE: dict[str, Any] = {}
+
+
+def clear_caches() -> None:
+    """Forget cached Steam/Proton lookups (after installing Proton, or in tests)."""
+    _CACHE.clear()
+
+
 def steam_roots() -> list[Path]:
+    if "steam_roots" in _CACHE:
+        return list(_CACHE["steam_roots"])
     candidates = [
         HOME / ".local/share/Steam",
         HOME / ".steam/steam",
@@ -813,7 +846,8 @@ def steam_roots() -> list[Path]:
             resolved = path.resolve()
             if resolved not in roots:
                 roots.append(resolved)
-    return roots
+    _CACHE["steam_roots"] = roots
+    return list(roots)
 
 
 def flatpak_steam_installed() -> bool:
@@ -893,7 +927,8 @@ def parse_steam_appid(text: str) -> tuple[str, str | None]:
         return text, None
     match = re.search(r"(?:store\.steampowered\.com|steamcommunity\.com)/app/(\d+)(?:/([^/?#]+))?", text)
     if match:
-        title = urllib.parse.unquote(match.group(2)).replace("_", " ") if match.group(2) else None
+        from urllib.parse import unquote
+        title = unquote(match.group(2)).replace("_", " ") if match.group(2) else None
         return match.group(1), title
     raise UserError(f"'{text}' isn't a Steam App ID.",
                     "Use the number from the game's Steam store page, e.g. store.steampowered.com/app/413150 "
@@ -934,6 +969,8 @@ def compat_tool_dirs() -> list[Path]:
 
 def find_protons() -> list[Path]:
     """All Proton builds found, best first: GE-Proton, other custom builds, then Valve's Proton."""
+    if "protons" in _CACHE:
+        return list(_CACHE["protons"])
     groups: list[list[Path]] = [[], [], []]
     seen: set[Path] = set()
 
@@ -953,7 +990,8 @@ def find_protons() -> list[Path]:
     ordered: list[Path] = []
     for group in groups:
         ordered += sorted(group, key=lambda p: natural_key(proton_label(p)), reverse=True)
-    return ordered
+    _CACHE["protons"] = ordered
+    return list(ordered)
 
 
 def proton_wine_bins(proton: Path) -> tuple[Path, Path] | None:
@@ -1035,14 +1073,14 @@ def analyze_log(text: str, name: str) -> list[str]:
                  r"wineserver: .*version mismatch", text, re.I):
         hints.append(f"The game's Windows environment (prefix) looks broken. Try a fresh one: "
                      f"lgme set {name} --new-prefix   (the old one is kept so saves aren't lost)")
-    if re.search(r"mscoree|\.NET Framework|mono", text, re.I) and "dotnet48" not in " ".join(hints):
+    if re.search(r"mscoree\.dll|\.NET Framework|Wine Mono is not installed", text, re.I) and "dotnet48" not in " ".join(hints):
         hints.append(f"The game may need .NET. Try: lgme fix {name} dotnet48")
     if re.search(r"libfuse\.so\.2|fusermount", text):
         hints.append("AppImages need FUSE 2. Install the 'fuse2' (Arch) or 'libfuse2' (Ubuntu) package.")
     if re.search(r"Exec format error|cannot execute binary file", text):
         hints.append("This program isn't built for your computer. Pick another one: "
                      f"lgme set {name} --pick-exe")
-    if re.search(r"Permission denied", text):
+    if re.search(r"(exec|execve|open|cannot open|failed to open)[^\n]{0,80}Permission denied", text, re.I):
         hints.append("Linux blocked access to a file. Make sure the game folder is yours and not on a "
                      "read-only drive (NTFS drives can cause this).")
     return hints
@@ -1054,34 +1092,100 @@ def notify(summary: str, body: str) -> None:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+LOG_KEEP_BYTES = 4 * 1024 * 1024  # a game's log is trimmed to about this size after it closes
+LOG_HEAD_BYTES = 256 * 1024       # start-up errors (like missing DLLs) are at the top: keep them
+LOG_READ_BYTES = 512 * 1024       # how much of the end crash hints look at
+
+
+def read_log_tail(path: Path, max_bytes: int = LOG_READ_BYTES) -> str:
+    """The end of a log file, without loading a huge log into memory."""
+    try:
+        with path.open("rb") as fh:
+            size = fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, size - max_bytes))
+            data = fh.read(max_bytes)
+    except OSError:
+        return ""
+    text = data.decode("utf-8", errors="replace")
+    return text.split("\n", 1)[-1] if size > max_bytes else text
+
+
+def read_log_sample(path: Path) -> str:
+    """The start and the end of a log: enough for crash hints, cheap even for huge logs."""
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(LOG_HEAD_BYTES)
+            size = fh.seek(0, os.SEEK_END)
+    except OSError:
+        return ""
+    if size <= LOG_HEAD_BYTES + LOG_READ_BYTES:
+        return read_log_tail(path, LOG_HEAD_BYTES + LOG_READ_BYTES)
+    return head.decode("utf-8", errors="replace") + "\n" + read_log_tail(path)
+
+
+def trim_log(path: Path) -> None:
+    """Shrink a huge log to its first 256 KB + last ~4 MB, streaming (little memory)."""
+    try:
+        size = path.stat().st_size
+        if size <= 2 * LOG_KEEP_BYTES:
+            return
+        tmp = path.with_name(path.name + ".tmp")
+        with path.open("rb") as src, tmp.open("wb") as out:
+            out.write(src.read(LOG_HEAD_BYTES))
+            out.write(b"\n# ... (middle of the log trimmed to keep it small) ...\n")
+            src.seek(size - LOG_KEEP_BYTES)
+            src.readline()  # start at a line boundary
+            while chunk := src.read(256 * 1024):
+                out.write(chunk)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
 def run_logged(command: list[str], env: dict[str, str], cwd: Path, log_path: Path,
-               verbose: bool) -> tuple[int, float]:
+               verbose: bool, wait_for: list[str] | None = None) -> tuple[int, float]:
+    """Run a game and wait for it, saving its output to `log_path`.
+
+    Normally the game writes straight into the log file, so LGME itself just sleeps
+    (no CPU use) until the game exits. Only with --verbose does LGME copy the output
+    to the terminal too. `wait_for` is an extra command (e.g. `wineserver -w`) that
+    blocks until helper processes the game started have also finished.
+    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
-    with log_path.open("w", encoding="utf-8", errors="replace", buffering=1) as log:
-        log.write(f"# LGME {VERSION} - {now_iso()}\n# Command: {shlex.join(command)}\n# Folder: {cwd}\n\n")
+    with log_path.open("wb") as log:
+        log.write(f"# LGME {VERSION} - {now_iso()}\n# Command: {shlex.join(command)}\n"
+                  f"# Folder: {cwd}\n\n".encode())
+        log.flush()
         try:
             proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                    stdout=subprocess.PIPE if verbose else log, stderr=subprocess.STDOUT)
         except OSError as exc:
             raise UserError(f"Couldn't start the program: {exc.strerror}.",
                             "The file may be damaged or not a program. See: lgme info") from exc
-        assert proc.stdout is not None
         try:
-            for raw in proc.stdout:
-                line = raw.decode("utf-8", errors="replace")
-                log.write(line)
-                if verbose:
-                    sys.stdout.write(line)
+            if verbose:
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    log.write(raw)
+                    sys.stdout.write(raw.decode("utf-8", errors="replace"))
             proc.wait()
+            if wait_for:
+                # Launchers often start the real game and exit; wait until it's really closed.
+                subprocess.run(wait_for, env=env, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         except KeyboardInterrupt:
-            say("\nStopping the game…")
-            proc.terminate()
-            try:
-                proc.wait(10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+            if proc.poll() is None:
+                say("\nStopping the game…")
+                proc.terminate()
+                try:
+                    proc.wait(10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+            else:
+                say("\nStopped waiting. (Parts of the game may still be closing.)")
+    trim_log(log_path)
     return proc.returncode, time.monotonic() - start
 
 
@@ -1140,20 +1244,28 @@ def resolve_runner(name: str, game: dict[str, Any], proton_override: str | None 
     return wanted, proton
 
 
+# Wine/Proton log settings: only "module" errors (a DLL the game needs is missing), which
+# cost nothing unless something is wrong, and no DXVK log files written into game folders.
+QUIET_WINE_ENV = {"WINEDEBUG": "-all,err+module", "DXVK_LOG_LEVEL": "error", "DXVK_LOG_PATH": "none"}
+
+
 def build_launch(name: str, game: dict[str, Any], exe: Path, extra_args: list[str],
                  proton_override: str | None = None, force_wine: bool = False
-                 ) -> tuple[list[str], dict[str, str], str]:
+                 ) -> tuple[list[str], dict[str, str], str, list[str] | None]:
+    """Returns (command, environment, label, command that waits for Wine to finish)."""
     runner, proton = resolve_runner(name, game, proton_override, force_wine)
     env = os.environ.copy()
     env.update({k: str(v) for k, v in game.get("env", {}).items()})
     args = list(game.get("args", [])) + list(extra_args)
     if runner == "native":
         ensure_executable(exe)
-        return [str(exe), *args], env, "Linux (native)"
+        return [str(exe), *args], env, "Linux (native)", None
     prefix = game_prefix(name, game)
     if prefix_kind(prefix) == "empty":
         say("First launch: setting up a Windows environment for this game. This can take a minute…")
     prefix.mkdir(parents=True, exist_ok=True)
+    for key, value in QUIET_WINE_ENV.items():
+        env.setdefault(key, value)
     if runner == "proton":
         assert proton is not None
         env.pop("WINEPREFIX", None)
@@ -1163,10 +1275,15 @@ def build_launch(name: str, game: dict[str, Any], exe: Path, extra_args: list[st
         client.mkdir(parents=True, exist_ok=True)
         env.setdefault("STEAM_COMPAT_CLIENT_INSTALL_PATH", str(client))
         env.setdefault("PROTON_ENABLE_NVAPI", "1")
-        return [str(proton), "run", str(exe), *args], env, f"Proton ({proton_label(proton)})"
+        bins = proton_wine_bins(proton)
+        wait = [str(bins[1]), "-w"] if bins else None
+        if wait:  # Proton's wineserver looks for the prefix in WINEPREFIX
+            env_wait = dict(env, WINEPREFIX=str(prefix / "pfx"))
+            wait = ["env", *[f"{k}={v}" for k, v in env_wait.items() if k == "WINEPREFIX"], *wait]
+        return [str(proton), "run", str(exe), *args], env, f"Proton ({proton_label(proton)})", wait
     env["WINEPREFIX"] = str(prefix)
-    env.setdefault("WINEDEBUG", "fixme-all")
-    return ["wine", str(exe), *args], env, "Wine"
+    wineserver = shutil.which("wineserver")
+    return ["wine", str(exe), *args], env, "Wine", [wineserver, "-w"] if wineserver else None
 
 
 # --------------------------------------------------------------------------
@@ -1210,12 +1327,12 @@ def register_game(name: str, entry: dict[str, Any]) -> None:
 
 def after_add(name: str, entry: dict[str, Any]) -> None:
     good(f"Added '{name}'.")
-    tip(f"Play it with: lgme run {name}")
+    tip(f"Play it with: lgme {name}")
     if not is_interactive() or ASSUME_YES:
         return
     offer_quick_start(name, entry)
     if confirm("Play it now?", default=False):
-        cmd_run(argparse.Namespace(name=name, proton=None, wine=False, verbose=False, game_args=[]))
+        cmd_run(Args(name=name, proton=None, wine=False, verbose=False, game_args=[]))
 
 
 def offer_quick_start(name: str, entry: dict[str, Any]) -> None:
@@ -1239,9 +1356,9 @@ def run_installer(installer: Path, name: str) -> tuple[Path, Path, bool]:
     tip("If it offers to install extras (DirectX, Visual C++), say yes.")
     if not confirm("Start the installer now?", default=True):
         raise UserError("Cancelled before running the installer.")
-    command, env, runner_label = build_launch(name, temp_game, installer, [])
+    command, env, runner_label, wait = build_launch(name, temp_game, installer, [])
     say(f"Running the installer with {runner_label}… (wait for its window)")
-    code, _ = run_logged(command, env, installer.parent, logs_dir() / f"{name}-installer.log", False)
+    code, _ = run_logged(command, env, installer.parent, logs_dir() / f"{name}-installer.log", False, wait)
     drive_c = prefix_drive_c(prefix)
     skip_top = {"windows", "users", "programdata", "dosdevices"}
     roots: list[Path] = []
@@ -1287,13 +1404,18 @@ def add_archive(archive: Path, args: argparse.Namespace, downloaded: bool = Fals
     try:
         say(f"Unpacking {archive.name} into {target}")
         extract_archive(archive, kind, partial)
-        candidates = find_launchables(partial)
+        candidates = find_launchables(partial, hint=name)
         installers = find_installers(partial)
         installer_mode = bool(installers) and not args.exe and not candidates
         if not installer_mode:
             exe = choose_launchable(partial, candidates, args.exe, name)
             rel = exe.resolve().relative_to(partial.resolve())
         os.rename(partial, target)
+    except OSError as exc:
+        shutil.rmtree(partial, ignore_errors=True)
+        raise UserError(f"Unpacking stopped: {exc.strerror or exc}.",
+                        "Nothing was kept. Check you have enough free space and permission to write to "
+                        f"{base}, then try again.") from exc
     except BaseException:
         shutil.rmtree(partial, ignore_errors=True)
         raise
@@ -1327,7 +1449,7 @@ def add_folder(folder: Path, args: argparse.Namespace, chosen_exe: Path | None =
     registry = read_registry()
     for other, game in registry.items():
         if game.get("root") and Path(game["root"]) == folder and not args.name:
-            raise UserError(f"This folder is already added as '{other}'.", f"Play it with: lgme run {other}")
+            raise UserError(f"This folder is already added as '{other}'.", f"Play it with: lgme {other}")
     name = choose_name(registry, folder.name, args.name)
     exe = chosen_exe or choose_launchable(folder, find_launchables(folder), args.exe, name)
     ensure_executable(exe)
@@ -1368,7 +1490,10 @@ def add_installer_exe(installer: Path, args: argparse.Namespace) -> None:
 
 
 def cmd_add(args: argparse.Namespace) -> None:
-    source = clean_user_path(args.source)
+    source = clean_user_path(args.source or "")
+    if not source:
+        raise UserError("No file, folder or link was given.",
+                        "Drag the game's file or folder into the terminal, or type its path.")
     if source.startswith(("http://", "https://")):
         archive = download_archive(source)
         if archive.suffix.lower() == ".exe":
@@ -1416,7 +1541,7 @@ def cmd_steam_install(args: argparse.Namespace) -> None:
             if not manifest_installed(steam_manifest(appid)):
                 launch_steam(f"steam://install/{appid}")
                 say("Opened Steam's install window for it.")
-            tip(f"Play it with: lgme run {other}")
+            tip(f"Play it with: lgme {other}")
             return
     if steam_command() is None:
         raise UserError("Steam isn't installed.", "Install it with: lgme setup")
@@ -1433,7 +1558,7 @@ def cmd_steam_install(args: argparse.Namespace) -> None:
         tip("Steam will open an install window. Click Install. (You need to own the game on your account.)")
         tip("Windows-only game? In Steam: right-click it → Properties → Compatibility → "
             "tick 'Force the use of a specific Steam Play compatibility tool'.")
-    tip(f"When it's installed, play with: lgme run {name}")
+    tip(f"When it's installed, play with: lgme {name}")
     if is_interactive() and not ASSUME_YES:
         offer_quick_start(name, entry)
 
@@ -1482,7 +1607,7 @@ def cmd_list(_: argparse.Namespace) -> None:
         painted = _paint("32", status) if status.startswith("ready") else _paint("33", status)
         say(f"{name:<{width}}  {kind:<8}  {painted}")
     say("")
-    tip("Play a game with: lgme run NAME    •    Details: lgme info NAME")
+    tip("Play a game with: lgme NAME    •    Details: lgme info NAME")
 
 
 def cmd_info(args: argparse.Namespace) -> None:
@@ -1520,6 +1645,19 @@ def cmd_info(args: argparse.Namespace) -> None:
         say(f"  Last log: {log}")
 
 
+QUICK_EXIT_SECONDS = 8
+
+
+def duration(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds} second{'s' if seconds != 1 else ''}"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes // 60} h {minutes % 60} min"
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     registry = read_registry()
     name = find_game(registry, args.name)
@@ -1538,29 +1676,32 @@ def cmd_run(args: argparse.Namespace) -> None:
         raise UserError(f"The game's program file is missing: {exe}",
                         "Was the game folder moved, renamed or deleted? If you moved it, point LGME at "
                         f"the new place: lgme set {name} --exe \"/new/path/to/{exe.name}\"")
-    command, env, label = build_launch(name, game, exe, args.game_args, args.proton, args.wine)
+    command, env, label, wait = build_launch(name, game, exe, args.game_args, args.proton, args.wine)
     log_path = logs_dir() / f"{name}.log"
     say(f"Starting {bold(game.get('title') or name)} with {label}…")
     if not args.verbose:
         say(f"(Game messages are saved to {log_path}. Close the game to come back here.)")
-    code, seconds = run_logged(command, env, exe.parent, log_path, args.verbose)
+    code, seconds = run_logged(command, env, exe.parent, log_path, args.verbose, wait)
     registry = read_registry()
     if name in registry:
         registry[name]["last_played"] = now_iso()
         write_registry(registry)
-    if code == 0 and seconds >= 15:
-        good(f"{name} closed. Played for {int(seconds // 60)} min.")
+    hints = analyze_log(read_log_sample(log_path), name) if code != 0 or seconds < QUICK_EXIT_SECONDS else []
+    if code == 0 and not hints:
+        if seconds < QUICK_EXIT_SECONDS:
+            say(f"{name} closed after {duration(seconds)}.")
+            tip(f"If the game didn't open at all, see what happened: lgme logs {name}")
+        else:
+            good(f"{name} closed. Played for {duration(seconds)}.")
         return
-    hints = analyze_log(log_path.read_text(errors="replace"), name)
-    if code != 0 or hints or seconds < 15:
-        warn(f"The game stopped after {int(seconds)} seconds" + (f" (exit code {code})." if code else "."))
-        for hint in hints:
-            tip(hint)
-        if not hints:
-            tip(f"See what happened: lgme logs {name}")
-            tip(f"Check your setup: lgme doctor    •    Look up the game on protondb.com for fixes")
-        if not sys.stdout.isatty():
-            notify(f"{name} stopped", hints[0] if hints else f"See: lgme logs {name}")
+    warn(f"The game stopped after {duration(seconds)}" + (f" (exit code {code})." if code else "."))
+    for hint in hints:
+        tip(hint)
+    if not hints:
+        tip(f"See what happened: lgme logs {name}")
+        tip("Check your setup: lgme doctor    •    Look up the game on protondb.com for fixes")
+    if not sys.stdout.isatty():
+        notify(f"{name} stopped", hints[0] if hints else f"See: lgme logs {name}")
 
 
 def cmd_logs(args: argparse.Namespace) -> None:
@@ -1569,11 +1710,12 @@ def cmd_logs(args: argparse.Namespace) -> None:
     log = logs_dir() / f"{name}.log"
     if not log.exists():
         raise UserError(f"No log yet for '{name}'.", f"A log is saved each time you run: lgme run {name}")
-    lines = log.read_text(errors="replace").splitlines()
-    say(bold(f"Last {min(args.lines, len(lines))} lines of {log}:"))
-    for line in lines[-args.lines:]:
+    lines = read_log_tail(log).splitlines()
+    count = max(0, min(args.lines, len(lines)))
+    say(bold(f"Last {count} lines of {log}:"))
+    for line in lines[len(lines) - count:]:
         say("  " + line)
-    hints = analyze_log("\n".join(lines), name)
+    hints = analyze_log(read_log_sample(log), name)
     if hints:
         say("")
         say(bold("What this might mean:"))
@@ -1656,6 +1798,8 @@ def cmd_rename(args: argparse.Namespace) -> None:
     registry = read_registry()
     old = find_game(registry, args.old)
     new = slug(args.new)
+    if new in RESERVED_NAMES:
+        raise UserError(f"'{new}' is one of LGME's own commands, so it can't be a game name.")
     if new in registry:
         raise UserError(f"You already have a game called '{new}'.")
     game = registry.pop(old)
@@ -2064,6 +2208,9 @@ def install_packages(pm: str, packages: list[str]) -> bool:
 
 
 def install_ge_proton() -> None:
+    import hashlib
+    import urllib.error
+    import urllib.request
     say("Looking up the latest GE-Proton release on GitHub…")
     request = urllib.request.Request(GE_PROTON_API, headers={"User-Agent": USER_AGENT,
                                                             "Accept": "application/vnd.github+json"})
@@ -2117,6 +2264,7 @@ def install_ge_proton() -> None:
     finally:
         shutil.rmtree(staging, ignore_errors=True)
         part.unlink(missing_ok=True)
+    clear_caches()
     good(f"Installed {tag} into {dest_dir}")
     tip("Restart Steam if it's open, so it can see the new Proton version too.")
 
@@ -2150,6 +2298,9 @@ def cmd_setup(args: argparse.Namespace) -> None:
     todo = [c for c in checks if c["status"] != "ok" and c["fix"]]
     if not todo:
         good("Nothing to fix. You're ready to play!")
+        return
+    if not is_interactive() and not ASSUME_YES:
+        tip("Run 'lgme setup' in a terminal to fix these (it asks before installing anything).")
         return
     pm = package_manager()
     wanted: list[str] = []
@@ -2255,7 +2406,7 @@ def cmd_menu(_: argparse.Namespace) -> None:
     if not read_registry() and not find_protons() and not shutil.which("wine"):
         warn("It looks like your computer isn't set up for Windows games yet.")
         if confirm("Run the guided setup first?", default=True):
-            cmd_setup(argparse.Namespace(update_proton=False))
+            cmd_setup(Args(update_proton=False))
             say("")
     options = [
         ("Play a game", "play"),
@@ -2278,31 +2429,37 @@ def cmd_menu(_: argparse.Namespace) -> None:
             if choice == "play":
                 name = menu_choose_game("play")
                 if name:
-                    cmd_run(argparse.Namespace(name=name, proton=None, wine=False, verbose=False, game_args=[]))
+                    cmd_run(Args(name=name, proton=None, wine=False, verbose=False, game_args=[]))
             elif choice == "add":
                 say("Drag the game file or folder into this window (or paste a download link), then press Enter.")
                 source = ask("File, folder or link")
-                cmd_add(argparse.Namespace(source=source, name=None, exe=None, prefix=None, runner=None))
+                if not source:
+                    say("Nothing entered. Back to the menu.")
+                    continue
+                cmd_add(Args(source=source, name=None, exe=None, prefix=None, runner=None))
             elif choice == "steam":
                 say("Find the game on store.steampowered.com and copy the page link (or just the App ID number).")
                 appid = ask("Steam link or App ID")
-                cmd_steam_install(argparse.Namespace(appid=appid, name=None))
+                if not appid:
+                    say("Nothing entered. Back to the menu.")
+                    continue
+                cmd_steam_install(Args(appid=appid, name=None))
             elif choice == "list":
-                cmd_list(argparse.Namespace())
+                cmd_list(Args())
             elif choice == "fix":
                 name = menu_choose_game("fix")
                 if name:
                     if (logs_dir() / f"{name}.log").exists():
-                        cmd_logs(argparse.Namespace(name=name, lines=15))
-                    if read_registry()[name].get("kind") == "windows" and confirm(
+                        cmd_logs(Args(name=name, lines=15))
+                    if read_registry()[name].get("kind") not in ("steam", "native") and confirm(
                             "Install a missing Windows component for it?", default=True):
-                        cmd_fix(argparse.Namespace(name=name, components=[]))
+                        cmd_fix(Args(name=name, components=[]))
             elif choice == "setup":
-                cmd_setup(argparse.Namespace(update_proton=False))
+                cmd_setup(Args(update_proton=False))
             elif choice == "remove":
                 name = menu_choose_game("remove")
                 if name:
-                    cmd_remove(argparse.Namespace(name=name, delete_files=False, delete_saves=False))
+                    cmd_remove(Args(name=name, delete_files=False, delete_saves=False))
             elif choice == "help":
                 say(HELP_TEXT)
         except UserError as exc:
@@ -2355,15 +2512,16 @@ Add -y to accept the safe default answer to every question.
 """
 
 
-class FriendlyParser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:  # type: ignore[override]
-        message = message.replace("the following arguments are required", "missing")
-        sys.stderr.write(_paint("31", "Error: ", sys.stderr) + message + "\n")
-        sys.stderr.write(f"See examples with: lgme help   (or: {self.prog} --help)\n")
-        raise SystemExit(2)
-
-
 def build_parser() -> argparse.ArgumentParser:
+    import argparse
+
+    class FriendlyParser(argparse.ArgumentParser):
+        def error(self, message: str) -> None:  # type: ignore[override]
+            message = message.replace("the following arguments are required", "missing")
+            sys.stderr.write(_paint("31", "Error: ", sys.stderr) + message + "\n")
+            sys.stderr.write(f"See examples with: lgme help   (or: {self.prog} --help)\n")
+            raise SystemExit(2)
+
     kwargs: dict[str, Any] = {}
     if sys.version_info >= (3, 14):
         kwargs["suggest_on_error"] = True
@@ -2463,6 +2621,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parser_commands(parser: argparse.ArgumentParser) -> set[str]:
+    import argparse
     for action in parser._actions:  # noqa: SLF001 - argparse has no public API for this
         if isinstance(action, argparse._SubParsersAction):
             return set(action.choices)
@@ -2493,12 +2652,17 @@ def main(argv: list[str] | None = None) -> int:
     for i in range(len(argv) - 1, 0, -1):
         if argv[i - 1] == "--args" and argv[i].startswith("-"):
             argv[i - 1:i + 1] = [f"--args={argv[i]}"]
+    fast = fast_play_args(argv)
+    if fast is not None:  # `lgme NAME`: skip building the full command-line parser
+        fast.game_args = game_args
+        return execute(fast)
     parser = build_parser()
-    if argv and not argv[0].startswith("-") and argv[0] not in parser_commands(parser):
+    first = next((i for i, a in enumerate(argv) if a not in ("-y", "--yes", "--debug")), None)
+    if first is not None and not argv[first].startswith("-") and argv[first] not in parser_commands(parser):
         try:  # "lgme wuchang" is the same as "lgme run wuchang"
             registry = read_registry()
-            if argv[0] in registry or slug(argv[0]) in registry:
-                argv = ["run", *argv]
+            if argv[first] in registry or slug(argv[first]) in registry:
+                argv.insert(first, "run")
         except UserError:
             pass
     args = parser.parse_args(argv)
@@ -2513,17 +2677,51 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("Options after -- only work with 'lgme run'.\n")
         return 2
     args.game_args = game_args
+    return execute(args)
+
+
+def fast_play_args(argv: list[str]) -> Args | None:
+    """Recognise the most common command, playing a game, without loading argparse."""
+    if len(argv) == 2 and argv[0] in ("run", "play", "start"):
+        name = argv[1]
+    elif len(argv) == 1:
+        name = argv[0]
+    else:
+        return None
+    if not name or name.startswith("-") or name in RESERVED_NAMES:
+        return None
+    try:
+        registry = read_registry()
+    except UserError:
+        return None
+    if name not in registry and slug(name) not in registry:
+        return None
+    return Args(func=cmd_run, name=name, proton=None, wine=False, verbose=False, yes=False, debug=False)
+
+
+def execute(args: Args) -> int:
+    global ASSUME_YES
+    ASSUME_YES = bool(getattr(args, "yes", False))
     try:
         args.func(args)
     except UserError as exc:
         print_error(exc)
         return 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         sys.stderr.write("\nCancelled.\n")
         return 130
     except BrokenPipeError:  # e.g. `lgme list | head`; the reader went away, that's fine
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 141
+    except OSError as exc:
+        if getattr(args, "debug", False):
+            raise
+        where = f" ({exc.filename})" if exc.filename else ""
+        hint = {28: "Your disk is full. Free up some space and try again.",
+                13: "You don't have permission there. Use a folder in your home directory.",
+                30: "That drive is read-only."}.get(exc.errno or 0, "Run the same command with --debug for details.")
+        print_error(UserError(f"{exc.strerror or exc}{where}.", hint))
+        return 1
     except Exception as exc:  # noqa: BLE001 - last-resort friendly message
         if getattr(args, "debug", False):
             raise

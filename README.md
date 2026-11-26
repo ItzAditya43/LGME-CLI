@@ -37,7 +37,9 @@ This puts the `lgme` command in `~/.local/bin`. If that folder isn't in your PAT
 
 </details>
 
-**Update:** `lgme update` · **Uninstall:** `rm ~/.local/bin/lgme` (your games and saves stay where they are)
+**Update:** `lgme update` · **Uninstall:** `rm ~/.local/bin/lgme && rm -r ~/.local/share/lgme/app` (your games, saves and settings stay where they are)
+
+**Light on your PC:** LGME is one small Python file using only the standard library. Starting a game adds about 0.05 s. While you play, LGME just sleeps and uses no CPU. It writes the game's messages straight to a log that is capped at a few MB.
 
 ## 2. Get your computer ready (one time)
 

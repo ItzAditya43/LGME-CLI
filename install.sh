@@ -1,12 +1,14 @@
 #!/bin/sh
 # LGME installer - puts the `lgme` command in ~/.local/bin.
 #   curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh
-# Uninstall: rm ~/.local/bin/lgme
+# Uninstall: rm ~/.local/bin/lgme && rm -r ~/.local/share/lgme/app
+#   (your games, saves and settings are kept)
 set -eu
 
 REPO="ItzAditya43/LGME-CLI"
-URL="https://github.com/$REPO/releases/latest/download/lgme"
+URL="${LGME_DOWNLOAD_URL:-https://github.com/$REPO/releases/latest/download/lgme}"
 BIN="${LGME_BIN_DIR:-$HOME/.local/bin}"
+APP="${XDG_DATA_HOME:-$HOME/.local/share}/lgme/app"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'Problem: %s\n' "$1" >&2; [ $# -gt 1 ] && printf '→ %s\n' "$2" >&2; exit 1; }
@@ -18,8 +20,8 @@ command -v python3 >/dev/null 2>&1 || fail "LGME needs Python 3, which isn't ins
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || fail "LGME needs Python 3.9 or newer." \
   "Update Python with your package manager."
 
-mkdir -p "$BIN"
-tmp=$(mktemp "$BIN/.lgme-install.XXXXXX")
+mkdir -p "$BIN" "$APP"
+tmp=$(mktemp "$APP/.lgme-install.XXXXXX")
 trap 'rm -f "$tmp"' EXIT INT TERM
 
 if command -v curl >/dev/null 2>&1; then
@@ -39,9 +41,21 @@ if [ -e "$BIN/lgme" ] && ! grep -q "LGME" "$BIN/lgme" 2>/dev/null; then
     "Move it away, or install elsewhere: LGME_BIN_DIR=/some/dir sh install.sh"
 fi
 
-chmod 755 "$tmp"
-mv -f "$tmp" "$BIN/lgme"
+# The program lives in $APP; the `lgme` command is a tiny launcher that imports it, so Python
+# can cache the compiled code (faster start, less work every time you run it).
+chmod 644 "$tmp"
+mv -f "$tmp" "$APP/lgme.py"
 trap - EXIT INT TERM
+quoted_app=$(printf "%s" "$APP" | sed "s/'/'\\''/g")
+stub="$BIN/.lgme-stub.$$"
+cat > "$stub" <<STUB
+#!/bin/sh
+# LGME launcher (installed by install.sh). Update: lgme update
+# Uninstall: rm ~/.local/bin/lgme && rm -r ~/.local/share/lgme/app
+exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); import lgme; sys.exit(lgme.main())' '$quoted_app' "\$@"
+STUB
+chmod 755 "$stub"
+mv -f "$stub" "$BIN/lgme"
 
 say "✓ Installed $("$BIN/lgme" --version) to $BIN/lgme"
 

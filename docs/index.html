@@ -346,8 +346,8 @@
       <div class="stats rv">
         <div class="stat"><b>1 file</b><span>the whole program, ~110 KB</span></div>
         <div class="stat"><b>0</b><span>extra packages to install</span></div>
-        <div class="stat"><b class="mono">0.16s</b><span>to start a command</span></div>
-        <div class="stat"><b>$0</b><span>free, no account</span></div>
+        <div class="stat"><b class="mono">~0%</b><span>CPU used by LGME while you play</span></div>
+        <div class="stat"><b class="mono">0.05s</b><span>added when starting a game</span></div>
       </div>
     </div>
   </section>
@@ -408,7 +408,7 @@
         <article class="card s2 half rv">
           <div class="ico amber"><svg><use href="#i-feather"/></svg></div>
           <h3>Feather-light</h3>
-          <p>A single Python file with nothing to compile and no background process. It updates itself with <code>lgme update</code>.</p>
+          <p>One small Python file with no background process. While you play, LGME sleeps and uses no CPU. Logs are capped at a few MB. It updates itself with <code>lgme update</code>.</p>
         </article>
         <article class="card s2 rv">
           <div class="ico"><svg><use href="#i-shield"/></svg></div>
@@ -719,7 +719,7 @@ Running the installer with Proton (GE-Proton11-6)…
         <details><summary>Will it delete my games or saves?</summary><p>Not without asking. Removing a game takes it off your list. Game files are deleted only if LGME unpacked them and you say yes. A game's prefix, which is where saves usually live, is deleted only if LGME created it and you say yes. Folders you added yourself are never deleted.</p></details>
         <details><summary>Does every Windows game work?</summary><p>Most do, thanks to Proton, but not all. Games with anti-cheat that blocks Linux usually won't. Check the game on protondb.com, where other players share what works.</p></details>
         <details><summary>Where does LGME get games from?</summary><p>Only from Steam, or from files and direct links you give it. It has no game catalog and doesn't bypass any store.</p></details>
-        <details><summary>How do I update or uninstall it?</summary><p>Update with <code>lgme update</code>. To uninstall, delete the file with <code>rm ~/.local/bin/lgme</code>. Your games, saves and settings stay where they are (<code>~/Games/LGME</code>, <code>~/.local/share/lgme</code>, <code>~/.config/lgme</code>).</p></details>
+        <details><summary>How do I update or uninstall it?</summary><p>Update with <code>lgme update</code>. To uninstall, run <code>rm ~/.local/bin/lgme &amp;&amp; rm -r ~/.local/share/lgme/app</code>. Your games, saves and settings stay where they are (<code>~/Games/LGME</code>, <code>~/.local/share/lgme</code>, <code>~/.config/lgme</code>).</p></details>
       </div>
 
       <div class="cta rv">
