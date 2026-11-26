@@ -1,5 +1,7 @@
 # LGME-CLI — Linux Gaming Made Easy
 
+🌐 **Website & guide:** https://itzaditya43.github.io/LGME-CLI/
+
 **Play your games on Linux without the headache.** LGME (`lgme`) is a small command-line helper for people new to Linux gaming. It sets up what your computer needs, adds your games, and starts them. When something breaks, it explains the problem in plain language.
 
 It works with:

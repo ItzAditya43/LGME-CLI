@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LGME — Linux Gaming Made Easy</title>
+<meta name="description" content="LGME is a tiny command-line helper for new Linux gamers. It sets up your PC, adds the games you already have (Steam, ZIP, 7z, RAR, folders, installers) and starts them with Proton or Wine, with plain-English help when something breaks." />
+<meta name="theme-color" content="#000000" />
+<meta name="color-scheme" content="dark" />
+<meta property="og:title" content="LGME — Linux Gaming Made Easy" />
+<meta property="og:description" content="Set up your Linux PC for games, add any game, and play it by typing its name. One small file, free." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #000000;
+    --panel: #050505;
+    --raised: #0b0b0b;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.15);
+    --text: #ededed;
+    --dim: #a3a3a3;
+    --faint: #7a7a7a;
+    --lime: #a3e635;
+    --lime-dim: rgba(163, 230, 53, 0.12);
+    --lime-on: #0b1200;
+    --cyan: #5ee3f0;
+    --violet: #a496ff;
+    --amber: #f2c14e;
+    --rose: #ff7a90;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  img, svg { display: block; max-width: 100%; }
+  .wrap { width: min(1160px, 100% - 48px); margin-inline: auto; }
+  @media (max-width: 560px) { .wrap { width: calc(100% - 32px); } }
+  .mono { font-family: var(--mono); }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 6px; }
+  code { font-family: var(--mono); font-size: 0.92em; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+  /* ---------- Nav ---------- */
+  .nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); background: rgba(0, 0, 0, 0.72); border-bottom: 1px solid var(--line); }
+  .nav-in { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .brand svg { width: 28px; height: 28px; }
+  .brand span { font-family: var(--mono); font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase; }
+  .nav-links { display: flex; gap: 28px; font-size: 14px; color: var(--dim); }
+  .nav-links a { transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta { display: flex; align-items: center; gap: 10px; }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+  @media (max-width: 420px) { .nav-cta .gh-label { display: none; } }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 22px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; border: 1px solid var(--line-strong); color: var(--text); background: transparent; cursor: pointer; font-family: inherit;
+    transition: transform 0.3s var(--ease), border-color 0.2s, background 0.2s, box-shadow 0.3s;
+  }
+  .btn:hover { border-color: rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.04); }
+  .btn.primary { background: var(--lime); border-color: var(--lime); color: var(--lime-on); box-shadow: 0 10px 40px -12px rgba(163, 230, 53, 0.6); }
+  .btn.primary:hover { transform: translateY(-2px); box-shadow: 0 16px 48px -12px rgba(163, 230, 53, 0.8); background: #b5ef55; }
+  .btn.sm { height: 36px; padding: 0 16px; font-size: 13px; }
+  .btn svg { width: 15px; height: 15px; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 88px 0 40px; text-align: center; isolation: isolate; }
+  .hero::before {
+    content: ""; position: absolute; inset: -80px 0 auto; height: 640px; z-index: -1;
+    background:
+      radial-gradient(ellipse 60% 55% at 50% 0%, rgba(163, 230, 53, 0.18), transparent 70%),
+      radial-gradient(ellipse 30% 30% at 80% 18%, rgba(94, 227, 240, 0.07), transparent 70%),
+      radial-gradient(ellipse 30% 30% at 18% 22%, rgba(164, 150, 255, 0.07), transparent 70%);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0 0 auto; height: 640px; z-index: -1; opacity: 0.5;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px; mask-image: radial-gradient(ellipse 60% 70% at 50% 0%, #000, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 0%, #000, transparent 75%);
+  }
+  .mark-hero { width: 104px; height: 104px; margin: 0 auto 28px; overflow: visible; }
+  .lm-frame { fill: none; stroke: rgba(255,255,255,.16); stroke-width: 1.6; }
+  .lm-chev { fill: none; stroke: var(--text); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+  .lm-cursor { fill: var(--lime); }
+  .lm-glow { fill: url(#lg); }
+  .mark-hero .lm-chev { animation: draw 0.9s 0.1s cubic-bezier(0.65, 0, 0.35, 1) both; }
+  .mark-hero .lm-cursor { animation: pop 0.6s 0.8s var(--ease) both, blink 1.1s 1.6s steps(1) infinite; transform-origin: 41px 41px; }
+  .mark-hero .lm-glow { animation: fade 1.2s 0.9s both, breathe 4.5s 2.2s ease-in-out infinite; transform-origin: 41px 41px; }
+  @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes pop { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes breathe { 50% { transform: scale(1.25); opacity: 0.7; } }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-strong);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--dim); background: rgba(255, 255, 255, 0.02);
+  }
+  .eyebrow i { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 10px var(--lime); }
+  h1 { font-size: clamp(40px, 7vw, 78px); line-height: 1.02; letter-spacing: -0.04em; font-weight: 600; margin: 22px auto 22px; max-width: 13ch; }
+  h1 em { font-style: normal; color: var(--lime); }
+  .lede { max-width: 660px; margin: 0 auto; color: var(--dim); font-size: clamp(16px, 2vw, 19px); }
+  .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+  .hero-install { max-width: 860px; margin: 30px auto 0; text-align: left; }
+  .hero-note { margin-top: 18px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  /* ---------- Terminal demo ---------- */
+  .shot { position: relative; margin: 64px auto 0; width: min(980px, 100%); text-align: left; }
+  .shot::before { content: ""; position: absolute; inset: 8% 6% -6%; z-index: -1; filter: blur(70px); opacity: 0.5; background: radial-gradient(ellipse at 50% 30%, rgba(163, 230, 53, 0.45), transparent 70%); }
+  .frame { border: 1px solid var(--line-strong); border-radius: 18px; overflow: hidden; background: var(--panel); box-shadow: 0 50px 120px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+  .frame-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--raised); }
+  .frame-bar i { width: 11px; height: 11px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
+  .frame-bar span { margin-left: 10px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .tty { height: 400px; padding: 20px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.75; color: var(--dim); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+  .tty-in { white-space: pre-wrap; word-break: break-word; }
+  @media (max-width: 560px) { .tty { height: 360px; font-size: 11.5px; padding: 16px; } }
+  .tty .p { color: var(--lime); } .tty .c { color: var(--text); }
+  .ok { color: var(--lime); } .wa { color: var(--amber); } .tp { color: var(--cyan); } .df { color: var(--faint); } .bd { color: var(--text); font-weight: 500; } .er { color: var(--rose); }
+  .caret { display: inline-block; width: 8px; height: 1.1em; vertical-align: -0.2em; background: var(--lime); animation: blink 1s steps(1) infinite; }
+
+  /* ---------- Sections ---------- */
+  section { padding: 120px 0 0; }
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--lime); }
+  h2 { font-size: clamp(30px, 4.4vw, 48px); line-height: 1.08; letter-spacing: -0.035em; font-weight: 600; margin: 14px 0 16px; max-width: 22ch; }
+  .sub { color: var(--dim); max-width: 620px; font-size: 17px; }
+  .center { text-align: center; }
+  .center h2, .center .sub { margin-inline: auto; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: var(--line); }
+  .stat { background: var(--panel); padding: 28px 26px; }
+  .stat b { display: block; font-size: 32px; letter-spacing: -0.03em; font-weight: 600; }
+  .stat span { font-size: 13.5px; color: var(--dim); }
+  @media (max-width: 820px) { .stats { grid-template-columns: repeat(2, 1fr); } .stat b { font-size: 24px; white-space: nowrap; } .stat { padding: 22px 18px; } }
+
+  /* Bento */
+  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-top: 56px; }
+  .card {
+    position: relative; border: 1px solid var(--line); border-radius: 20px; padding: 28px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 60%), var(--panel);
+    overflow: hidden; transition: border-color 0.3s, transform 0.4s var(--ease);
+  }
+  .card::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 0%), rgba(163, 230, 53, 0.1), transparent 60%); }
+  .card:hover { border-color: var(--line-strong); transform: translateY(-3px); }
+  .card:hover::after { opacity: 1; }
+  .card.s2 { grid-column: span 2; } .card.s3 { grid-column: span 3; } .card.s4 { grid-column: span 4; }
+  @media (max-width: 900px) { .card.s2, .card.s3, .card.s4 { grid-column: span 6; } .card.s2.half { grid-column: span 3; } }
+  @media (max-width: 560px) { .card.s2.half { grid-column: span 6; } .card { padding: 22px; } }
+  .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 18px; background: var(--lime-dim); color: var(--lime); }
+  .ico svg { width: 20px; height: 20px; }
+  .ico.cyan { background: rgba(94, 227, 240, 0.12); color: var(--cyan); }
+  .ico.violet { background: rgba(164, 150, 255, 0.12); color: var(--violet); }
+  .ico.amber { background: rgba(242, 193, 78, 0.12); color: var(--amber); }
+  .ico.rose { background: rgba(255, 122, 144, 0.12); color: var(--rose); }
+  .card h3 { font-size: 19px; letter-spacing: -0.015em; font-weight: 600; margin-bottom: 8px; }
+  .card p { color: var(--dim); font-size: 14.5px; }
+  .term { margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; background: #000; padding: 14px 16px; font-family: var(--mono); font-size: 12.5px; color: var(--dim); line-height: 1.7; overflow-x: auto; white-space: pre; }
+
+  /* Code + copy */
+  .code { position: relative; margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: #000; padding: 14px 48px 14px 16px; font-family: var(--mono); font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-all; }
+  .code .p { color: var(--lime); user-select: none; }
+  .code .cm { color: var(--faint); }
+  .hero-install .code { font-size: 13.5px; padding: 16px 52px 16px 18px; border-color: var(--line-strong); }
+  .copy { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 8px; border: 0; background: transparent; color: var(--faint); cursor: pointer; display: grid; place-items: center; }
+  .copy:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+  .copy.done { color: var(--lime); }
+  .copy svg { width: 15px; height: 15px; }
+
+  /* Guide steps */
+  .steps { margin-top: 56px; display: grid; gap: 14px; counter-reset: step; }
+  .step { display: grid; grid-template-columns: 64px 1fr; gap: 22px; border: 1px solid var(--line); border-radius: 20px; padding: 28px; background: var(--panel); }
+  .step-n { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--lime); background: var(--lime-dim); border: 1px solid rgba(163, 230, 53, 0.25); }
+  .step h3 { font-size: 22px; letter-spacing: -0.02em; font-weight: 600; margin-bottom: 6px; }
+  .step p { color: var(--dim); font-size: 15px; max-width: 72ch; }
+  .step .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .step .two .term { margin-top: 16px; }
+  .step .two > .code { align-self: start; }
+  .step ul { margin-top: 12px; padding-left: 0; list-style: none; display: grid; gap: 8px; color: var(--dim); font-size: 14.5px; }
+  .step li { display: flex; gap: 10px; }
+  .step li svg { flex: none; width: 17px; height: 17px; margin-top: 3px; color: var(--lime); }
+  @media (max-width: 860px) { .step .two { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .step { grid-template-columns: 1fr; gap: 14px; padding: 22px; } }
+
+  /* Chooser */
+  .chooser { margin-top: 56px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); overflow: hidden; }
+  .tablist { display: flex; gap: 6px; padding: 10px; border-bottom: 1px solid var(--line); background: var(--raised); overflow-x: auto; scrollbar-width: none; }
+  .tablist::-webkit-scrollbar { display: none; }
+  .tab { flex: none; height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--dim); font: 500 14px var(--font); cursor: pointer; transition: color 0.2s, background 0.2s, border-color 0.2s; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--lime-on); background: var(--lime); }
+  .tabpanel { padding: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .tabpanel[hidden] { display: none; }
+  .tabpanel h3 { font-size: 20px; letter-spacing: -0.015em; font-weight: 600; margin-bottom: 8px; }
+  .tabpanel p { color: var(--dim); font-size: 15px; }
+  .tabpanel ol { margin-top: 12px; padding-left: 20px; color: var(--dim); font-size: 14.5px; display: grid; gap: 6px; }
+  .tabpanel ol li::marker { color: var(--lime); font-family: var(--mono); }
+  @media (max-width: 860px) { .tabpanel { grid-template-columns: 1fr; padding: 22px; } }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 56px; }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--line); border-radius: 20px; padding: 30px; background: var(--panel); }
+  .panel.us { border-color: rgba(163, 230, 53, 0.35); background: linear-gradient(180deg, rgba(163, 230, 53, 0.07), transparent 55%), var(--panel); }
+  .panel h3 { font-size: 15px; font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; font-weight: 500; }
+  .panel.us h3 { color: var(--lime); }
+  .panel ul { list-style: none; padding: 0; display: grid; gap: 14px; }
+  .panel li { display: flex; gap: 12px; color: var(--dim); font-size: 15px; }
+  .panel li svg { flex: none; width: 18px; height: 18px; margin-top: 3px; }
+  .panel.them li svg { color: var(--faint); } .panel.us li { color: var(--text); } .panel.us li svg { color: var(--lime); }
+  .fine { margin-top: 18px; font-size: 13.5px; color: var(--faint); max-width: 780px; }
+
+  /* Tables */
+  .tbl { margin-top: 56px; border: 1px solid var(--line); border-radius: 18px; overflow-x: auto; }
+  .tbl table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .tbl th, .tbl td { text-align: left; padding: 16px 24px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl th { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); font-weight: 500; background: var(--panel); white-space: nowrap; }
+  .tbl tr:last-child td { border-bottom: 0; }
+  .tbl td { color: var(--dim); }
+  .tbl td:first-child { color: var(--text); }
+  .tbl td.cmd { font-family: var(--mono); font-size: 13.5px; color: var(--lime); white-space: nowrap; }
+  .tbl tr:hover td { background: rgba(255, 255, 255, 0.015); }
+  .tbl .grp td { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); background: var(--panel); padding-top: 12px; padding-bottom: 12px; }
+  @media (max-width: 640px) { .tbl th, .tbl td { padding: 12px 14px; font-size: 13.5px; } .tbl td.cmd { font-size: 12.5px; } }
+
+  /* FAQ */
+  .faq { margin: 56px auto 0; max-width: 780px; border-top: 1px solid var(--line); }
+  .faq details { border-bottom: 1px solid var(--line); }
+  .faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 4px; font-size: 17px; font-weight: 500; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-family: var(--mono); font-size: 20px; color: var(--lime); transition: transform 0.3s var(--ease); }
+  .faq details[open] summary::after { transform: rotate(45deg); }
+  .faq details p { padding: 0 4px 24px; color: var(--dim); font-size: 15.5px; max-width: 68ch; }
+
+  /* CTA + footer */
+  .cta { position: relative; margin-top: 120px; padding: 90px 24px; text-align: center; border: 1px solid var(--line); border-radius: 28px; overflow: hidden; background: var(--panel); }
+  .cta::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 50% 70% at 50% 100%, rgba(163, 230, 53, 0.2), transparent 70%); }
+  .cta > * { position: relative; }
+  .cta h2 { margin-inline: auto; max-width: 16ch; }
+  .cta .code { max-width: 680px; margin: 26px auto 0; text-align: left; }
+  footer { margin-top: 90px; border-top: 1px solid var(--line); padding: 56px 0 48px; color: var(--faint); font-size: 14px; }
+  .foot { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 32px; }
+  @media (max-width: 760px) { .foot { grid-template-columns: 1fr 1fr; } .foot > :first-child { grid-column: span 2; } }
+  .foot h4 { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 14px; font-weight: 500; }
+  .foot ul { list-style: none; padding: 0; display: grid; gap: 9px; }
+  .foot a:hover { color: var(--text); }
+  .foot p { max-width: 34ch; margin-top: 14px; }
+  .legal { margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; font-size: 13px; }
+
+  /* Reveal */
+  .rv { opacity: 0; transform: translateY(22px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
+  .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rv { opacity: 1; transform: none; transition: none; }
+    .mark-hero *, .card, .caret { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h2M11 9h6M7 13h2M11 13h6M7 17h2M11 17h4"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8M14.7 6.3 13 4.6a4 4 0 0 0-5.3 5.3L3 14.6 6.4 18l4.7-4.7"/></symbol>
+    <symbol id="i-steam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="8" r="3.5"/><circle cx="8" cy="16" r="2.5"/><path d="m10.2 14.8 3-4.3M2.5 13.5l4 1.8"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16l13-8Z"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M7 3v5h8V3M7 21v-7h10v7"/></symbol>
+    <symbol id="i-feather" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-6 0-13 4-13 12v4M7 16h7a6 6 0 0 0 6-6V4M16 8 4 20"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-gh" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.58.23 2.75.11 3.04.74.81 1.19 1.83 1.19 3.09 0 4.42-2.7 5.4-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="LGME home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M17 21l12 11-12 11" fill="none" stroke="#ededed" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><rect x="33" y="38" width="17" height="7" rx="3.5" fill="#a3e635"/></svg>
+      <span>LGME</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#features">What it does</a>
+      <a href="#guide">Guide</a>
+      <a href="#help">When it breaks</a>
+      <a href="#commands">Commands</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn sm" href="https://github.com/ItzAditya43/LGME-CLI" aria-label="LGME on GitHub"><svg><use href="#i-gh"/></svg> <span class="gh-label">GitHub</span></a>
+      <a class="btn sm primary" href="#install">Install</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- ===== Hero ===== -->
+  <div class="hero">
+    <div class="wrap">
+      <svg class="mark-hero" viewBox="0 0 64 64" role="img" aria-label="LGME mark: a terminal prompt with a lime cursor">
+        <defs><radialGradient id="lg"><stop offset="0" stop-color="#a3e635" stop-opacity=".55"/><stop offset="1" stop-color="#a3e635" stop-opacity="0"/></radialGradient></defs>
+        <rect class="lm-frame" x="1" y="1" width="62" height="62" rx="15"/>
+        <circle class="lm-glow" cx="41" cy="41" r="14"/>
+        <path class="lm-chev" d="M17 21l12 11-12 11" pathLength="1"/>
+        <rect class="lm-cursor" x="33" y="38" width="16" height="6" rx="3"/>
+      </svg>
+      <span class="eyebrow"><i></i> Free · One small file · Made for new Linux gamers</span>
+      <h1>Linux gaming,<br /><em>made easy.</em></h1>
+      <p class="lede">LGME sets up your PC for games, adds the games you already have, and starts them with Proton or Wine. When something goes wrong, it tells you what happened in plain English and how to fix it.</p>
+
+      <div class="hero-install" id="install">
+        <div class="code" data-copy="curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh"><span class="p">$ </span>curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh<button class="copy" aria-label="Copy install command"><svg><use href="#i-copy"/></svg></button></div>
+      </div>
+      <div class="hero-cta">
+        <a class="btn primary" href="#guide">Read the guide <svg><use href="#i-arrow"/></svg></a>
+        <a class="btn" href="https://github.com/ItzAditya43/LGME-CLI/releases/latest"><svg><use href="#i-gh"/></svg> Latest release</a>
+      </div>
+      <p class="hero-note">Arch · Ubuntu / Debian · Fedora · openSUSE &nbsp;/&nbsp; needs Python 3.9+</p>
+
+      <div class="shot rv">
+        <div class="frame">
+          <div class="frame-bar"><i></i><i></i><i></i><span>~ — lgme</span></div>
+          <div class="tty" aria-label="Demo: checking setup, adding a game and playing it" role="img"><div class="tty-in" id="tty"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Facts ===== -->
+  <section style="padding-top:96px">
+    <div class="wrap">
+      <div class="stats rv">
+        <div class="stat"><b>1 file</b><span>the whole program, ~110 KB</span></div>
+        <div class="stat"><b>0</b><span>extra packages to install</span></div>
+        <div class="stat"><b class="mono">0.16s</b><span>to start a command</span></div>
+        <div class="stat"><b>$0</b><span>free, no account</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Features ===== -->
+  <section id="features">
+    <div class="wrap">
+      <div class="rv">
+        <span class="kicker">What it does</span>
+        <h2>Everything between "I have a game" and "I'm playing it."</h2>
+        <p class="sub">Linux can run most Windows games, but setting it up by hand means Proton versions, prefixes, environment variables and log files. LGME does that part for you.</p>
+      </div>
+      <div class="bento">
+        <article class="card s4 rv">
+          <div class="ico"><svg><use href="#i-box"/></svg></div>
+          <h3>One command adds any game</h3>
+          <p>Point it at a ZIP, 7z, RAR or TAR archive (split ones too), a folder you've already unpacked, a <code>setup.exe</code> installer, or a direct download link you trust. LGME unpacks it, finds the program that starts the game, and asks you only when it's unsure.</p>
+<div class="term"><span class="df">$</span> <span class="bd">lgme add ~/Downloads/Cool-Game.7z</span>
+<span class="ok">✓</span> Unpacked the archive
+<span class="ok">✓</span> Added 'cool-game'.
+<span class="tp">→</span> Play it with: lgme cool-game</div>
+        </article>
+        <article class="card s2 rv">
+          <div class="ico violet"><svg><use href="#i-menu"/></svg></div>
+          <h3>A menu, no commands to learn</h3>
+          <p>Type <code>lgme</code> and choose from a numbered list. To add a game, drag its file or folder into the terminal window.</p>
+        </article>
+        <article class="card s2 half rv">
+          <div class="ico cyan"><svg><use href="#i-wrench"/></svg></div>
+          <h3>Sets up your PC</h3>
+          <p><code>lgme setup</code> checks Steam, Proton, Wine, graphics drivers and disk space. It installs what's missing after asking you first.</p>
+        </article>
+        <article class="card s2 half rv">
+          <div class="ico amber"><svg><use href="#i-steam"/></svg></div>
+          <h3>Steam games, too</h3>
+          <p>Paste a Steam store link and LGME asks Steam to install the game, then launches it alongside your other games.</p>
+        </article>
+        <article class="card s2 rv">
+          <div class="ico rose"><svg><use href="#i-bulb"/></svg></div>
+          <h3>Explains crashes</h3>
+          <p>If a game closes early, LGME reads its log and tells you the likely cause, such as a missing DLL or graphics driver, and the command that fixes it.</p>
+        </article>
+        <article class="card s3 rv">
+          <div class="ico"><svg><use href="#i-layers"/></svg></div>
+          <h3>Proton first, Wine as backup</h3>
+          <p>Windows games run with GE-Proton when you have it. <code>lgme setup</code> downloads the latest release from its official GitHub page and verifies the checksum. Every game gets its own Windows environment (a <em>prefix</em>), so one game can't break another.</p>
+        </article>
+        <article class="card s3 rv">
+          <div class="ico violet"><svg><use href="#i-play"/></svg></div>
+          <h3>Type the name, play the game</h3>
+          <p><code>lgme cool-game</code> starts it. LGME can also create a command so that typing just <code>cool-game</code> works, and add the game to your app menu next to your other apps.</p>
+        </article>
+        <article class="card s2 half rv">
+          <div class="ico cyan"><svg><use href="#i-save"/></svg></div>
+          <h3>Keeps your saves</h3>
+          <p>Already have a game folder with its own prefix? LGME finds it and reuses it, so your saves and settings come along.</p>
+        </article>
+        <article class="card s2 half rv">
+          <div class="ico amber"><svg><use href="#i-feather"/></svg></div>
+          <h3>Feather-light</h3>
+          <p>A single Python file with nothing to compile and no background process. It updates itself with <code>lgme update</code>.</p>
+        </article>
+        <article class="card s2 rv">
+          <div class="ico"><svg><use href="#i-shield"/></svg></div>
+          <h3>Never deletes without asking</h3>
+          <p>It won't overwrite a game, folder, prefix or command you already have, and it refuses archives that try to write outside their folder.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Guide ===== -->
+  <section id="guide">
+    <div class="wrap">
+      <div class="rv">
+        <span class="kicker">The guide</span>
+        <h2>From a fresh install to playing, in four steps.</h2>
+        <p class="sub">You only do steps 1 and 2 once. After that, adding and playing a game takes one command each.</p>
+      </div>
+
+      <div class="steps">
+        <article class="step rv">
+          <div class="step-n">01</div>
+          <div>
+            <h3>Install LGME</h3>
+            <p>Open a terminal (search for "Terminal" or "Konsole" in your app menu), paste this line and press Enter. It puts the <code>lgme</code> command in <code>~/.local/bin</code>. If your system doesn't look in that folder yet, the installer shows you the one line to fix it.</p>
+            <div class="code" data-copy="curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh"><span class="p">$ </span>curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+          </div>
+        </article>
+
+        <article class="step rv">
+          <div class="step-n">02</div>
+          <div>
+            <h3>Get your PC ready</h3>
+            <p>Run setup. It checks everything games need, then offers to fix each missing piece. Nothing is installed until you say yes. Package installs ask for your password.</p>
+            <div class="two">
+              <div class="code" data-copy="lgme setup"><span class="p">$ </span>lgme setup<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term"><span class="bd">LGME setup check</span>
+<span class="ok">✓</span> Steam: steam
+<span class="ok">✓</span> GE-Proton: GE-Proton11-6
+<span class="ok">✓</span> Wine: wine-11.21
+<span class="wa">!</span> winetricks: not installed
+<span class="ok">✓</span> Graphics (Vulkan): AMD Radeon
+<span class="df">Install winetricks? [Y/n]</span></div>
+            </div>
+            <ul>
+              <li><svg><use href="#i-check"/></svg><span><b>Steam, Wine, winetricks, 7-Zip</b> come from your distro's package manager (pacman, apt, dnf or zypper), or Steam from Flathub.</span></li>
+              <li><svg><use href="#i-check"/></svg><span><b>GE-Proton</b>, the best way to run Windows games, is downloaded from its official release and checked before installing.</span></li>
+              <li><svg><use href="#i-check"/></svg><span><b>Graphics:</b> if your Vulkan driver is missing, it tells you which one to install for AMD, Intel or NVIDIA.</span></li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="step rv">
+          <div class="step-n">03</div>
+          <div>
+            <h3>Add a game</h3>
+            <p>Use <code>lgme add</code> with whatever you have. It works out what kind of thing it is. Not sure? Pick below to see exactly what to type and what happens.</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="chooser rv" id="chooser">
+        <div class="tablist" role="tablist" aria-label="What kind of game do you have?">
+          <button class="tab" role="tab" aria-selected="true" aria-controls="t-archive" id="b-archive">An archive (.zip .7z .rar)</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="t-folder" id="b-folder" tabindex="-1">A game folder</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="t-installer" id="b-installer" tabindex="-1">An installer (setup.exe)</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="t-steam" id="b-steam" tabindex="-1">A Steam game</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="t-link" id="b-link" tabindex="-1">A download link</button>
+        </div>
+
+        <div class="tabpanel" role="tabpanel" id="t-archive" aria-labelledby="b-archive">
+          <div>
+            <h3>Unpack and add an archive</h3>
+            <p>ZIP, 7z, RAR and TAR all work. For split archives (<code>.part1.rar</code>, <code>.001</code>), keep every part in the same folder and add the first one.</p>
+            <ol>
+              <li>LGME suggests a short name, like <code>cool-game</code>.</li>
+              <li>It checks you have enough free space, then unpacks into <code>~/Games/LGME/</code>.</li>
+              <li>It finds the game's program and skips helpers like crash reporters and redistributables.</li>
+              <li>Your original archive is left alone.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="code" data-copy="lgme add ~/Downloads/Cool-Game.zip"><span class="p">$ </span>lgme add ~/Downloads/Cool-Game.zip<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term"><span class="df">Name for this game [cool-game]:</span>
+Unpacking Cool-Game.zip into ~/Games/LGME/cool-game
+<span class="ok">✓</span> Unpacked the archive
+<span class="ok">✓</span> Added 'cool-game'.
+<span class="df">Start it by just typing 'cool-game'? [Y/n]</span>
+<span class="df">Add it to your app menu? [Y/n]</span></div>
+          </div>
+        </div>
+
+        <div class="tabpanel" role="tabpanel" id="t-folder" aria-labelledby="b-folder" hidden>
+          <div>
+            <h3>Add a folder that's already unpacked</h3>
+            <p>The game stays exactly where it is. LGME only remembers where it is.</p>
+            <ol>
+              <li>If several programs could start the game, you pick from a numbered list.</li>
+              <li>If the folder already has a prefix (for example <code>prefix/pfx</code>), LGME offers to reuse it, keeping your saves.</li>
+              <li>Removing the game later never deletes this folder.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="code" data-copy="lgme add ~/Games/Cool-Game"><span class="p">$ </span>lgme add ~/Games/Cool-Game<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term">Found several programs. Which one starts it?
+  1. CoolGame.exe  [Windows]  <span class="df">(recommended)</span>
+  2. Tools/Editor.exe  [Windows]
+<span class="df">Found an existing Windows environment (prefix)
+at ~/Games/Cool-Game/prefix. Use it? [Y/n]</span>
+<span class="ok">✓</span> Added 'cool-game'.</div>
+          </div>
+        </div>
+
+        <div class="tabpanel" role="tabpanel" id="t-installer" aria-labelledby="b-installer" hidden>
+          <div>
+            <h3>Run a Windows installer</h3>
+            <p>Works for an installer <code>.exe</code> on its own, or inside an archive.</p>
+            <ol>
+              <li>LGME makes a fresh Windows environment just for this game.</li>
+              <li>The installer window opens. Click through it and keep the suggested folder.</li>
+              <li>When it finishes, LGME finds the installed game and adds it.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="code" data-copy="lgme add ~/Downloads/setup_cool_game.exe"><span class="p">$ </span>lgme add ~/Downloads/setup_cool_game.exe<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term"><span class="bd">This is a Windows installer.</span>
+<span class="tp">→</span> Click through the installer and keep
+  the suggested install folder.
+Running the installer with Proton (GE-Proton11-6)…
+<span class="ok">✓</span> Added 'cool-game'.</div>
+          </div>
+        </div>
+
+        <div class="tabpanel" role="tabpanel" id="t-steam" aria-labelledby="b-steam" hidden>
+          <div>
+            <h3>Install through Steam</h3>
+            <p>Copy the game's Steam store link (or just the number in it) and paste it. You need to own the game on your Steam account.</p>
+            <ol>
+              <li>Steam opens its install window. Click Install.</li>
+              <li>If it's already installed, LGME simply adds it.</li>
+              <li><code>lgme steam list</code> shows everything already installed in Steam.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="code" data-copy="lgme steam add https://store.steampowered.com/app/413150/Stardew_Valley/"><span class="p">$ </span>lgme steam add https://store.steampowered.com/app/413150/Stardew_Valley/<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term"><span class="ok">✓</span> Added 'stardew-valley' and asked Steam
+  to install it.
+<span class="tp">→</span> Steam will open an install window.
+  Click Install.
+<span class="tp">→</span> When it's installed: lgme stardew-valley</div>
+          </div>
+        </div>
+
+        <div class="tabpanel" role="tabpanel" id="t-link" aria-labelledby="b-link" hidden>
+          <div>
+            <h3>Download from a link you trust</h3>
+            <p>Use a <em>direct</em> link to the archive file, such as one from a developer's itch.io or GitHub page.</p>
+            <ol>
+              <li>If the download stops, run the same command again and it resumes.</li>
+              <li>If the link opens a web page instead of a file, LGME tells you to download it in your browser and add that file.</li>
+              <li>After a successful unpack, the downloaded archive is removed to save space.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="code" data-copy="lgme add https://example.com/cool-game.zip"><span class="p">$ </span>lgme add https://example.com/cool-game.zip<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+<div class="term">Downloading:  64%  1.2 GB of 1.9 GB  38 MB/s
+<span class="ok">✓</span> Downloaded 1.9 GB
+<span class="ok">✓</span> Unpacked the archive
+<span class="ok">✓</span> Added 'cool-game'.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="steps" style="margin-top:14px">
+        <article class="step rv">
+          <div class="step-n">04</div>
+          <div>
+            <h3>Play</h3>
+            <p>Type <code>lgme</code> and the game's name. If you said yes to the shortcut, typing just the name works too, or you can click it in your app menu. The first launch takes a minute while the game's Windows environment is set up.</p>
+            <div class="two">
+              <div>
+                <div class="code" data-copy="lgme cool-game"><span class="p">$ </span>lgme cool-game<button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+                <div class="code" data-copy="lgme list"><span class="p">$ </span>lgme list   <span class="cm"># all your games</span><button class="copy" aria-label="Copy command"><svg><use href="#i-copy"/></svg></button></div>
+              </div>
+<div class="term">Starting <span class="bd">Cool Game</span> with Proton (GE-Proton11-6)…
+<span class="df">(Game messages are saved to a log.
+ Close the game to come back here.)</span>
+<span class="ok">✓</span> cool-game closed. Played for 47 min.</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== When it breaks ===== -->
+  <section id="help">
+    <div class="wrap">
+      <div class="rv">
+        <span class="kicker">When it breaks</span>
+        <h2>Plain-English help, not a wall of logs.</h2>
+        <p class="sub">When a game closes early, LGME reads the game's log and points you to the fix. These are the most common situations.</p>
+      </div>
+      <div class="tbl rv">
+        <table>
+          <thead><tr><th>What you see</th><th>Try this</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>"The game is missing Windows files: msvcp140.dll"</td><td class="cmd">lgme fix cool-game vcrun2022</td><td>Installs the Microsoft runtime the game expects, using winetricks.</td></tr>
+            <tr><td>Game closes instantly, no hint</td><td class="cmd">lgme logs cool-game</td><td>Shows the last messages and what they might mean. Also check protondb.com.</td></tr>
+            <tr><td>LGME started the wrong program</td><td class="cmd">lgme set cool-game --pick-exe</td><td>Choose again from the list.</td></tr>
+            <tr><td>Works badly with Proton</td><td class="cmd">lgme set cool-game --runner wine</td><td>Some older games prefer plain Wine. Use <code>--runner auto</code> to switch back.</td></tr>
+            <tr><td>"prefix looks broken"</td><td class="cmd">lgme set cool-game --new-prefix</td><td>Starts a fresh Windows environment. The old one is kept, so saves aren't lost.</td></tr>
+            <tr><td>"Vulkan support seems missing"</td><td class="cmd">lgme doctor</td><td>Your graphics driver needs Vulkan. The check says which driver to install.</td></tr>
+            <tr><td>"That link opens a web page, not a file"</td><td class="cmd">lgme add ~/Downloads/file.zip</td><td>Download it in your browser first, then add the file.</td></tr>
+            <tr><td>Game uses EasyAntiCheat / BattlEye</td><td>Check protondb.com</td><td>Anti-cheat often blocks Linux unless the developer turned support on.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Compare ===== -->
+  <section id="why">
+    <div class="wrap">
+      <div class="rv">
+        <span class="kicker">Why LGME</span>
+        <h2>The same result, without the homework.</h2>
+        <p class="sub">LGME isn't magic. It does the same steps experienced Linux gamers do by hand, in the right order, every time.</p>
+      </div>
+      <div class="compare">
+        <div class="panel them rv">
+          <h3>Setting it up by hand</h3>
+          <ul>
+            <li><svg><use href="#i-x"/></svg>Find, download and unpack the right Proton build yourself</li>
+            <li><svg><use href="#i-x"/></svg>Write a launch script full of environment variables for every game</li>
+            <li><svg><use href="#i-x"/></svg>Keep track of which prefix belongs to which game</li>
+            <li><svg><use href="#i-x"/></svg>Read raw Wine logs to work out why a game won't start</li>
+          </ul>
+        </div>
+        <div class="panel us rv">
+          <h3>With LGME</h3>
+          <ul>
+            <li><svg><use href="#i-check"/></svg><code>lgme setup</code> installs and verifies GE-Proton for you</li>
+            <li><svg><use href="#i-check"/></svg><code>lgme add</code>, then type the game's name to play</li>
+            <li><svg><use href="#i-check"/></svg>One prefix per game, created and remembered automatically</li>
+            <li><svg><use href="#i-check"/></svg>Crash hints that name the fix, like <code>lgme fix … vcrun2022</code></li>
+          </ul>
+        </div>
+      </div>
+      <p class="fine rv">LGME downloads games only from Steam or from links you give it. It has no game catalog or store of its own. Use sources you trust.</p>
+    </div>
+  </section>
+
+  <!-- ===== Commands ===== -->
+  <section id="commands">
+    <div class="wrap">
+      <div class="rv">
+        <span class="kicker">Reference</span>
+        <h2>Every command, on one page.</h2>
+        <p class="sub">You won't need most of these. <code>lgme</code> on its own opens the menu, and <code>lgme help</code> prints this list in your terminal.</p>
+      </div>
+      <div class="tbl rv">
+        <table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr class="grp"><td colspan="2">Getting ready</td></tr>
+            <tr><td class="cmd">lgme setup</td><td>Check your PC and install what's missing (asks first)</td></tr>
+            <tr><td class="cmd">lgme doctor</td><td>Only check, change nothing</td></tr>
+            <tr><td class="cmd">lgme setup --update-proton</td><td>Get the newest GE-Proton</td></tr>
+            <tr class="grp"><td colspan="2">Adding games</td></tr>
+            <tr><td class="cmd">lgme add &lt;file | folder | link&gt;</td><td>Add an archive, folder, installer or direct link</td></tr>
+            <tr><td class="cmd">lgme steam add &lt;link or ID&gt;</td><td>Install a Steam game and add it</td></tr>
+            <tr><td class="cmd">lgme steam list</td><td>Games already installed in Steam</td></tr>
+            <tr class="grp"><td colspan="2">Playing</td></tr>
+            <tr><td class="cmd">lgme</td><td>Open the guided menu</td></tr>
+            <tr><td class="cmd">lgme &lt;game&gt;</td><td>Play (same as <code>lgme run &lt;game&gt;</code>)</td></tr>
+            <tr><td class="cmd">lgme run &lt;game&gt; -- -windowed</td><td>Pass options to the game after <code>--</code></td></tr>
+            <tr><td class="cmd">lgme list</td><td>Your games and whether they're ready</td></tr>
+            <tr><td class="cmd">lgme command &lt;game&gt;</td><td>Make typing just the game's name work</td></tr>
+            <tr><td class="cmd">lgme shortcut &lt;game&gt;</td><td>Add the game to your app menu</td></tr>
+            <tr class="grp"><td colspan="2">Fixing</td></tr>
+            <tr><td class="cmd">lgme logs &lt;game&gt;</td><td>Last messages from the game, with tips</td></tr>
+            <tr><td class="cmd">lgme fix &lt;game&gt; [components]</td><td>Install Windows components with winetricks</td></tr>
+            <tr><td class="cmd">lgme set &lt;game&gt; …</td><td>Change program, runner, Proton version, prefix, options</td></tr>
+            <tr><td class="cmd">lgme info &lt;game&gt;</td><td>Where everything is for that game</td></tr>
+            <tr class="grp"><td colspan="2">Tidying up</td></tr>
+            <tr><td class="cmd">lgme rename &lt;old&gt; &lt;new&gt;</td><td>Rename a game</td></tr>
+            <tr><td class="cmd">lgme remove &lt;game&gt;</td><td>Remove it (asks before deleting files or saves)</td></tr>
+            <tr><td class="cmd">lgme settings --games-dir &lt;path&gt;</td><td>Store new games on a bigger drive</td></tr>
+            <tr><td class="cmd">lgme update</td><td>Update LGME itself</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section id="faq">
+    <div class="wrap">
+      <div class="rv center">
+        <span class="kicker">FAQ</span>
+        <h2>Common questions.</h2>
+      </div>
+      <div class="faq rv">
+        <details><summary>I've never used a terminal. Can I still use this?</summary><p>Yes, that's who it's for. Open "Terminal" or "Konsole" from your app menu and paste the install line. After that, type <code>lgme</code> and choose from the menu. To add a game you can drag its file into the terminal window instead of typing the path.</p></details>
+        <details><summary>Which Linux distros does it work on?</summary><p>Any distro with Python 3.9 or newer, which is nearly all of them. <code>lgme setup</code> can install the extra tools automatically on Arch (and Manjaro, EndeavourOS, CachyOS), Ubuntu, Debian, Mint, Pop!_OS, Fedora and openSUSE. On other distros it tells you which packages to install.</p></details>
+        <details><summary>Do I need Steam?</summary><p>No. Steam is only needed for Steam games. Everything else runs with GE-Proton or Wine, and <code>lgme setup</code> can install GE-Proton without Steam.</p></details>
+        <details><summary>Will it delete my games or saves?</summary><p>Not without asking. Removing a game takes it off your list. Game files are deleted only if LGME unpacked them and you say yes. A game's prefix, which is where saves usually live, is deleted only if LGME created it and you say yes. Folders you added yourself are never deleted.</p></details>
+        <details><summary>Does every Windows game work?</summary><p>Most do, thanks to Proton, but not all. Games with anti-cheat that blocks Linux usually won't. Check the game on protondb.com, where other players share what works.</p></details>
+        <details><summary>Where does LGME get games from?</summary><p>Only from Steam, or from files and direct links you give it. It has no game catalog and doesn't bypass any store.</p></details>
+        <details><summary>How do I update or uninstall it?</summary><p>Update with <code>lgme update</code>. To uninstall, delete the file with <code>rm ~/.local/bin/lgme</code>. Your games, saves and settings stay where they are (<code>~/Games/LGME</code>, <code>~/.local/share/lgme</code>, <code>~/.config/lgme</code>).</p></details>
+      </div>
+
+      <div class="cta rv">
+        <h2>Start playing on Linux today.</h2>
+        <p class="sub" style="margin-inline:auto">One line to install, one command to get ready, then just play.</p>
+        <div class="code" data-copy="curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh"><span class="p">$ </span>curl -fsSL https://github.com/ItzAditya43/LGME-CLI/releases/latest/download/install.sh | sh<button class="copy" aria-label="Copy install command"><svg><use href="#i-copy"/></svg></button></div>
+        <div class="hero-cta">
+          <a class="btn primary" href="https://github.com/ItzAditya43/LGME-CLI/releases/latest">Latest release <svg><use href="#i-arrow"/></svg></a>
+          <a class="btn" href="https://github.com/ItzAditya43/LGME-CLI#readme">Read the README</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a class="brand" href="#top"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M17 21l12 11-12 11" fill="none" stroke="#ededed" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><rect x="33" y="38" width="17" height="7" rx="3.5" fill="#a3e635"/></svg><span>LGME</span></a>
+        <p>Linux Gaming Made Easy. Set up, add, play.</p>
+      </div>
+      <div><h4>Learn</h4><ul><li><a href="#features">What it does</a></li><li><a href="#guide">Guide</a></li><li><a href="#help">When it breaks</a></li><li><a href="#faq">FAQ</a></li></ul></div>
+      <div><h4>Get it</h4><ul><li><a href="#install">One-line install</a></li><li><a href="https://github.com/ItzAditya43/LGME-CLI/releases/latest">Latest release</a></li><li><a href="#commands">Commands</a></li></ul></div>
+      <div><h4>Project</h4><ul><li><a href="https://github.com/ItzAditya43/LGME-CLI">GitHub</a></li><li><a href="https://github.com/ItzAditya43/LGME-CLI#readme">README</a></li><li><a href="https://github.com/ItzAditya43/LGME-CLI/issues">Report an issue</a></li></ul></div>
+    </div>
+    <div class="legal"><span>© 2026 LGME-CLI</span><span>Not affiliated with Valve, Steam or WineHQ</span></div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  (function () {
+    var els = document.querySelectorAll(".rv");
+    if (!("IntersectionObserver" in window)) { els.forEach(function (e) { e.classList.add("in"); }); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+    els.forEach(function (e, i) { e.style.transitionDelay = (i % 3) * 70 + "ms"; io.observe(e); });
+  })();
+
+  // Card spotlight follows the pointer
+  document.querySelectorAll(".card").forEach(function (c) {
+    c.addEventListener("pointermove", function (e) {
+      var r = c.getBoundingClientRect();
+      c.style.setProperty("--mx", e.clientX - r.left + "px");
+      c.style.setProperty("--my", e.clientY - r.top + "px");
+    });
+  });
+
+  // Copy buttons
+  document.querySelectorAll(".code[data-copy]").forEach(function (box) {
+    var b = box.querySelector(".copy");
+    b.addEventListener("click", function () {
+      var text = box.dataset.copy;
+      var done = function () { b.classList.add("done"); b.setAttribute("aria-label", "Copied"); setTimeout(function () { b.classList.remove("done"); b.setAttribute("aria-label", "Copy command"); }, 1400); };
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done).catch(function () {}); return; }
+      var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      ta.remove();
+    });
+  });
+
+  // "What do you have?" tabs (keyboard: arrow keys)
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll("#chooser .tab"));
+    function select(t) {
+      tabs.forEach(function (x) {
+        var on = x === t;
+        x.setAttribute("aria-selected", on); x.tabIndex = on ? 0 : -1;
+        document.getElementById(x.getAttribute("aria-controls")).hidden = !on;
+      });
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { select(t); });
+      t.addEventListener("keydown", function (e) {
+        var n = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!n) return;
+        e.preventDefault();
+        var next = tabs[(i + n + tabs.length) % tabs.length]; select(next); next.focus();
+      });
+    });
+  })();
+
+  // Terminal demo (real LGME output)
+  (function () {
+    var tty = document.getElementById("tty");
+    var script = [
+      { cmd: "lgme setup", out: [
+        '<span class="bd">LGME setup check</span>',
+        '<span class="ok">✓</span> Steam: steam',
+        '<span class="ok">✓</span> GE-Proton: GE-Proton11-6',
+        '<span class="ok">✓</span> Wine: wine-11.21',
+        '<span class="ok">✓</span> Graphics (Vulkan): AMD Radeon Graphics',
+        '<span class="ok">✓</span> Nothing to fix. You\'re ready to play!' ] },
+      { cmd: "lgme add ~/Downloads/Cool-Game.zip", out: [
+        'Unpacking Cool-Game.zip into ~/Games/LGME/cool-game',
+        '<span class="ok">✓</span> Unpacked the archive',
+        '<span class="ok">✓</span> Added \'cool-game\'.',
+        '<span class="ok">✓</span> You can now start it by typing: <span class="bd">cool-game</span>' ] },
+      { cmd: "cool-game", out: [
+        'Starting <span class="bd">Cool Game</span> with Proton (GE-Proton11-6)…',
+        '<span class="df">(Game messages are saved to a log. Close the game to come back here.)</span>',
+        '<span class="ok">✓</span> cool-game closed. Played for 47 min.' ] }
+    ];
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function prompt(cmd) { return '<span class="p">~ $</span> <span class="c">' + cmd + '</span>'; }
+    if (reduce) {
+      tty.innerHTML = script.map(function (s) { return prompt(s.cmd) + "\n" + s.out.join("\n"); }).join("\n\n") + "\n" + prompt("") + '<span class="caret"></span>';
+      return;
+    }
+    var html = "", si = 0;
+    function render(extra) { tty.innerHTML = html + (extra || ""); }
+    function typeCmd() {
+      if (si >= script.length) { render(prompt("") + '<span class="caret"></span>'); setTimeout(function () { html = ""; si = 0; typeCmd(); }, 5000); return; }
+      var s = script[si], i = 0;
+      (function tick() {
+        render(prompt(s.cmd.slice(0, i)) + '<span class="caret"></span>');
+        if (i++ < s.cmd.length) { setTimeout(tick, 38 + Math.random() * 40); }
+        else { html += prompt(s.cmd) + "\n"; setTimeout(function () { printOut(s.out, 0); }, 350); }
+      })();
+    }
+    function printOut(lines, j) {
+      if (j >= lines.length) { html += "\n"; si++; setTimeout(typeCmd, 1100); render(); return; }
+      html += lines[j] + "\n"; render();
+      setTimeout(function () { printOut(lines, j + 1); }, 260);
+    }
+    var started = false;
+    var start = function () { if (!started) { started = true; typeCmd(); } };
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (en, obs) { if (en[0].isIntersecting) { start(); obs.disconnect(); } }, { threshold: 0.3 }).observe(tty);
+    } else { start(); }
+  })();
+</script>
+</body>
+</html>
